@@ -4,7 +4,7 @@
   "keywords": [
     "create-t3-app",
     "environment variables",
-    "zod"
+    "valibot"
   ],
   "author": "Julius Marminge",
   "license": "MIT",
@@ -39,13 +39,12 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "typescript": ">=4.7.2",
-    "zod": "^3.0.0"
+    "typescript": ">=4.7.2"
   },
   "devDependencies": {
     "eslint": "^8.39.0",
     "tsup": "^6.7.0",
     "typescript": "^5.0.4",
-    "zod": "^3.20.2"
+    "valibot": "^0.7.0"
   }
 }

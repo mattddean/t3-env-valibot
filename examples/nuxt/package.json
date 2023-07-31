@@ -14,6 +14,6 @@
   },
   "dependencies": {
     "@t3-oss/env-nuxt": "0.6.0",
-    "zod": "^3.20.2"
+    "valibot": "^0.7.0"
   }
 }

@@ -1,12 +1,12 @@
 import { createEnv } from "@t3-oss/env-core";
-import { z } from "zod";
+import { string } from "valibot";
 
 export const env = createEnv({
   server: {
-    PORT: z.string(),
+    PORT: string(),
   },
   client: {
-    PUBLIC_API_URL: z.string(),
+    PUBLIC_API_URL: string(),
   },
   // Astro bundles all environment variables so
   // we don't need to manually destructure them

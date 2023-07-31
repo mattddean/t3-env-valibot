@@ -1,4 +1,4 @@
-import type { ZodType } from "zod";
+import { type BaseSchema } from "valibot";
 import {
   createEnv as createEnvCore,
   ServerClientOptions,
@@ -9,9 +9,9 @@ const CLIENT_PREFIX = "NUXT_PUBLIC_" as const;
 type ClientPrefix = typeof CLIENT_PREFIX;
 
 type Options<
-  TServer extends Record<string, ZodType>,
-  TClient extends Record<`${ClientPrefix}${string}`, ZodType>,
-  TShared extends Record<string, ZodType>
+  TServer extends Record<string, BaseSchema>,
+  TClient extends Record<`${ClientPrefix}${string}`, BaseSchema>,
+  TShared extends Record<string, BaseSchema>
 > = Omit<
   StrictOptions<ClientPrefix, TServer, TClient, TShared> &
     ServerClientOptions<ClientPrefix, TServer, TClient>,
@@ -19,9 +19,9 @@ type Options<
 >;
 
 export function createEnv<
-  TServer extends Record<string, ZodType> = NonNullable<unknown>,
-  TClient extends Record<string, ZodType> = NonNullable<unknown>,
-  TShared extends Record<string, ZodType> = NonNullable<unknown>
+  TServer extends Record<string, BaseSchema> = NonNullable<unknown>,
+  TClient extends Record<string, BaseSchema> = NonNullable<unknown>,
+  TShared extends Record<string, BaseSchema> = NonNullable<unknown>
 >(opts: Options<TServer, TClient, TShared>) {
   const client = typeof opts.client === "object" ? opts.client : {};
   const server = typeof opts.server === "object" ? opts.server : {};

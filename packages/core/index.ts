@@ -1,4 +1,12 @@
-import { z, type ZodError, type ZodObject, type ZodType } from "zod";
+import {
+  object,
+  safeParse,
+  ValiError,
+  BaseSchema,
+  flatten,
+  merge,
+  ObjectOutput,
+} from "valibot";
 
 export type ErrorMessage<T extends string> = T;
 export type Simplify<T> = {
@@ -11,7 +19,7 @@ type Impossible<T extends Record<string, any>> = Partial<
   Record<keyof T, never>
 >;
 
-export interface BaseOptions<TShared extends Record<string, ZodType>> {
+export interface BaseOptions<TShared extends Record<string, BaseSchema>> {
   /**
    * How to determine whether the app is running on the server or the client.
    * @default typeof window === "undefined"
@@ -28,7 +36,7 @@ export interface BaseOptions<TShared extends Record<string, ZodType>> {
    * Called when validation fails. By default the error is logged,
    * and an error is thrown telling what environment variables are invalid.
    */
-  onValidationError?: (error: ZodError) => never;
+  onValidationError?: (error: ValiError) => never;
 
   /**
    * Called when a server-side environment variable is accessed on the client.
@@ -43,7 +51,7 @@ export interface BaseOptions<TShared extends Record<string, ZodType>> {
   skipValidation?: boolean;
 }
 
-export interface LooseOptions<TShared extends Record<string, ZodType>>
+export interface LooseOptions<TShared extends Record<string, BaseSchema>>
   extends BaseOptions<TShared> {
   runtimeEnvStrict?: never;
   /**
@@ -55,9 +63,9 @@ export interface LooseOptions<TShared extends Record<string, ZodType>>
 
 export interface StrictOptions<
   TPrefix extends string,
-  TServer extends Record<string, ZodType>,
-  TClient extends Record<string, ZodType>,
-  TShared extends Record<string, ZodType>
+  TServer extends Record<string, BaseSchema>,
+  TClient extends Record<string, BaseSchema>,
+  TShared extends Record<string, BaseSchema>
 > extends BaseOptions<TShared> {
   /**
    * Runtime Environment variables to use for validation - `process.env`, `import.meta.env` or similar.
@@ -84,7 +92,7 @@ export interface StrictOptions<
 
 export interface ClientOptions<
   TPrefix extends string,
-  TClient extends Record<string, ZodType>
+  TClient extends Record<string, BaseSchema>
 > {
   /**
    * Client-side environment variables are exposed to the client by default. Set what prefix they have
@@ -106,7 +114,7 @@ export interface ClientOptions<
 
 export interface ServerOptions<
   TPrefix extends string,
-  TServer extends Record<string, ZodType>
+  TServer extends Record<string, BaseSchema>
 > {
   /**
    * Specify your server-side environment variables schema here. This way you can ensure the app isn't
@@ -125,8 +133,8 @@ export interface ServerOptions<
 
 export type ServerClientOptions<
   TPrefix extends string,
-  TServer extends Record<string, ZodType>,
-  TClient extends Record<string, ZodType>
+  TServer extends Record<string, BaseSchema>,
+  TClient extends Record<string, BaseSchema>
 > =
   | (ClientOptions<TPrefix, TClient> & ServerOptions<TPrefix, TServer>)
   | (ServerOptions<TPrefix, TServer> & Impossible<ClientOptions<never, never>>)
@@ -134,9 +142,9 @@ export type ServerClientOptions<
 
 export type EnvOptions<
   TPrefix extends string,
-  TServer extends Record<string, ZodType>,
-  TClient extends Record<string, ZodType>,
-  TShared extends Record<string, ZodType>
+  TServer extends Record<string, BaseSchema>,
+  TClient extends Record<string, BaseSchema>,
+  TShared extends Record<string, BaseSchema>
 > =
   | (LooseOptions<TShared> & ServerClientOptions<TPrefix, TServer, TClient>)
   | (StrictOptions<TPrefix, TServer, TClient, TShared> &
@@ -144,15 +152,13 @@ export type EnvOptions<
 
 export function createEnv<
   TPrefix extends string = "",
-  TServer extends Record<string, ZodType> = NonNullable<unknown>,
-  TClient extends Record<string, ZodType> = NonNullable<unknown>,
-  TShared extends Record<string, ZodType> = NonNullable<unknown>
+  TServer extends Record<string, BaseSchema> = NonNullable<unknown>,
+  TClient extends Record<string, BaseSchema> = NonNullable<unknown>,
+  TShared extends Record<string, BaseSchema> = NonNullable<unknown>
 >(
   opts: EnvOptions<TPrefix, TServer, TClient, TShared>
 ): Simplify<
-  z.infer<ZodObject<TServer>> &
-    z.infer<ZodObject<TClient>> &
-    z.infer<ZodObject<TShared>>
+  ObjectOutput<TServer> & ObjectOutput<TClient> & ObjectOutput<TShared>
 > {
   const runtimeEnv = opts.runtimeEnvStrict ?? opts.runtimeEnv ?? process.env;
 
@@ -163,24 +169,21 @@ export function createEnv<
   const _client = typeof opts.client === "object" ? opts.client : {};
   const _server = typeof opts.server === "object" ? opts.server : {};
   const _shared = typeof opts.shared === "object" ? opts.shared : {};
-  const client = z.object(_client);
-  const server = z.object(_server);
-  const shared = z.object(_shared);
+  const client = object(_client);
+  const server = object(_server);
+  const shared = object(_shared);
   const isServer = opts.isServer ?? typeof window === "undefined";
 
-  const allClient = client.merge(shared);
-  const allServer = server.merge(shared).merge(client);
+  const allClient = merge([client, shared]);
+  const allServer = merge([server, shared, client]);
   const parsed = isServer
-    ? allServer.safeParse(runtimeEnv) // on server we can validate all env vars
-    : allClient.safeParse(runtimeEnv); // on client we can only validate the ones that are exposed
+    ? safeParse(allServer, runtimeEnv) // on server we can validate all env vars
+    : safeParse(allClient, runtimeEnv); // on client we can only validate the ones that are exposed
 
   const onValidationError =
     opts.onValidationError ??
-    ((error: ZodError) => {
-      console.error(
-        "❌ Invalid environment variables:",
-        error.flatten().fieldErrors
-      );
+    ((error: ValiError) => {
+      console.error("❌ Invalid environment variables:", flatten(error));
       throw new Error("Invalid environment variables");
     });
 
@@ -203,7 +206,7 @@ export function createEnv<
         !isServer &&
         opts.clientPrefix &&
         !prop.startsWith(opts.clientPrefix) &&
-        shared.shape[prop as keyof typeof shared.shape] === undefined
+        shared.object[prop as keyof typeof shared.object] === undefined
       ) {
         return onInvalidAccess(prop);
       }
@@ -211,6 +214,7 @@ export function createEnv<
     },
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any
-  return env as any;
+  return env as Simplify<
+    ObjectOutput<TServer> & ObjectOutput<TClient> & ObjectOutput<TShared>
+  >;
 }
